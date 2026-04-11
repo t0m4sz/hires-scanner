@@ -1,0 +1,5 @@
+# Automatyczna obsługa tekstu dla wszystkich plików
+* text=auto
+
+# Wymuszenie LF dla skryptów powłoki (ważne dla NAS/Docker)
+*.sh text eol=lf

@@ -1,0 +1,23 @@
+services:
+  hires-scanner:
+    build: .
+    container_name: hires-scanner
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - /volume2/docker/hires-scanner/app:/app
+      - /volume2/docker/hires-scanner/data:/data
+      - /volume2/docker/hires-scanner/logs:/logs
+      - /volume1/Multimedia/Muzyka/Tidal:/music:ro
+      - /usr/bin/ffprobe:/usr/bin/ffprobe:ro
+      - /usr/bin/sox:/usr/bin/sox:ro
+      - /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:ro
+      - /lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:ro
+    working_dir: /app
+    command: node server.js
+    environment:
+      - NODE_ENV=production
+      - MUSIC_PATH=/music
+      - DATA_PATH=/data
+      - LOGS_PATH=/logs
