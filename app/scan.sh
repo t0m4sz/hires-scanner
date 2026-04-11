@@ -157,10 +157,23 @@ analyze_spectrum() {
     [ "$ext" = "aac" ] || [ "$ext" = "m4a" ] && echo "meta_only" && return
     [ "$sr" -lt 88200 ] 2>/dev/null && echo "native" && return
 
+    # Single decode pass - pipe raw PCM to 3 parallel stat analyses via temp files
+    local tmp_below tmp_above tmp_above30
+    tmp_below=$(mktemp)
+    tmp_above=$(mktemp)
+    tmp_above30=$(mktemp)
+
+    sox "$file" -p remix 1 2>/dev/null | tee \
+        >(sox -p -n sinc -22000 stat 2>"$tmp_below") \
+        >(sox -p -n sinc  22000 stat 2>"$tmp_above") | \
+        sox -p -n sinc 30000 stat 2>"$tmp_above30"
+
     local e_below e_above e_above30
-    e_below=$(sox   "$file" -n remix 1 sinc -22000 stat 2>&1 | awk '/RMS amplitude/{print $NF}')
-    e_above=$(sox   "$file" -n remix 1 sinc  22000 stat 2>&1 | awk '/RMS amplitude/{print $NF}')
-    e_above30=$(sox "$file" -n remix 1 sinc  30000 stat 2>&1 | awk '/RMS amplitude/{print $NF}')
+    e_below=$(awk '/RMS.*amplitude/{print $NF}' "$tmp_below")
+    e_above=$(awk '/RMS.*amplitude/{print $NF}' "$tmp_above")
+    e_above30=$(awk '/RMS.*amplitude/{print $NF}' "$tmp_above30")
+
+    rm -f "$tmp_below" "$tmp_above" "$tmp_above30"
 
     [ -z "$e_below" ] || [ "$e_below" = "0" ] && echo "error" && return
 
