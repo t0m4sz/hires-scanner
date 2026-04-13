@@ -28,6 +28,7 @@ if [[ "$1" == "--dir" ]]; then SINGLE_DIR="$2"; fi
 if [[ "$*" =~ --dir\ (.+) ]]; then SINGLE_DIR="${BASH_REMATCH[1]}"; fi
 
 SCAN_START=$(date +%s)
+SCAN_ID=$(date -Iseconds)
 DONE=0; ERRORS=0; TOTAL_FILES=0; SKIPPED=0; TO_SCAN=0
 
 # =============================================================================
@@ -367,7 +368,7 @@ with open('$CACHE_FILE','w') as f: json.dump(cache,f)
     # Save result - apply overrides UNLESS this is single-dir rescan (override cleared)
     export _A="$artist" _B="$album" _P="$dir" _W="$win_path"
     export _S="$album_status" _C="$album_confidence" _T="$tooltip"
-    export _F="${#audio_files[@]}" _D="$(date -Iseconds)"
+    export _F="${#audio_files[@]}" _D="$(date -Iseconds)" _SI="$SCAN_ID"
     export _RF="$RESULTS_FILE" _OF="$OVERRIDES_FILE" _SINGLE="$SINGLE_MODE"
 
     python3 << 'PYEOF' 2>>"$LOG_FILE"
@@ -389,6 +390,7 @@ e = {
     'tooltip':    os.environ.get('_T',''),
     'fileCount':  int(os.environ.get('_F','0')),
     'scannedAt':  os.environ.get('_D',''),
+    'scanId':     os.environ.get('_SI',''),
     'manual':     False,
 }
 
@@ -432,7 +434,7 @@ DUR=$(printf "%02d:%02d:%02d" $((D/3600)) $(((D%3600)/60)) $((D%60)))
 
 if [ "$SINGLE_MODE" = false ]; then
     export _RF="$RESULTS_FILE" _MF="$META_FILE"
-    export _DONE="$DONE" _ERR="$ERRORS" _DUR="$DUR" _FULL="$FULL_SCAN"
+    export _DONE="$DONE" _ERR="$ERRORS" _DUR="$DUR" _FULL="$FULL_SCAN" _SI="$SCAN_ID"
     python3 << 'PYEOF' 2>>"$LOG_FILE"
 import json, os
 from datetime import datetime
@@ -448,6 +450,7 @@ meta={
     'errors':int(os.environ.get('_ERR','0')),
     'duration':os.environ.get('_DUR','00:00:00'),
     'mode':'full' if os.environ.get('_FULL')=='true' else 'incremental',
+    'lastScanId': os.environ.get('_SI',''),
 }
 with open(mf,'w') as f: json.dump(meta,f)
 PYEOF

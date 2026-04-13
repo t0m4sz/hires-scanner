@@ -93,6 +93,8 @@ td { padding:8px 14px; vertical-align:middle; }
 .badge.UN  { color:var(--c-unk);  background:rgba(170,136,34,.1);  border:1px solid rgba(170,136,34,.3); }
 .manual-icon { opacity:.7; font-style:normal; }
 
+.badge-new { display:inline-block; padding:1px 5px; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600; letter-spacing:.5px; border-radius:2px; color:#0f0f0f; background:#4caf82; margin-left:6px; vertical-align:middle; }
+
 /* ACTION BUTTONS */
 .copy-wrap { position:relative; display:inline-block; }
 .copy-tip { display:none; position:absolute; bottom:calc(100% + 6px); left:0; background:#1a1a1a; border:1px solid var(--bd); padding:6px 10px; font-size:11px; font-family:'IBM Plex Mono',monospace; white-space:nowrap; z-index:200; pointer-events:none; color:var(--muted); max-width:480px; overflow:hidden; text-overflow:ellipsis; }

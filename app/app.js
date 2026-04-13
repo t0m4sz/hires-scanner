@@ -301,7 +301,7 @@ function renderTable() {
 
         tr.innerHTML = `
           <td class="td-a">${escH(r.artist||'–')}</td>
-          <td class="td-b">${escH(r.album ||'–')}</td>
+          <td class="td-b">${escH(r.album ||'–')}${r.scanId && meta.lastScanId && r.scanId === meta.lastScanId && meta.mode === 'incremental' ? ' <span class="badge-new">NEW</span>' : ''}</td>
           <td>${badge(r.status, r.tooltip, isManual)}</td>
           <td class="td-f">${r.fileCount||'–'}</td>
           <td class="td-actions"></td>`;
