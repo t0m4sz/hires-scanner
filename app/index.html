@@ -8,31 +8,25 @@
 </head>
 <body>
 
-<!-- ── HEADER ── -->
 <header>
   <div class="logo">HI-RES<span>/</span>SCANNER</div>
-  <button class="btn-scan" id="btnScan">⬡ SKANUJ PLIKI</button>
-  <button class="btn-stop" id="btnStop" onclick="stopScan()" style="display:none">✕ PRZERWIJ</button>
+  <div class="header-actions">
+    <button class="btn-scan" id="btnScan">⬡ SKANUJ PLIKI</button>
+    <button class="btn-stop" id="btnStop" onclick="stopScan()" style="display:none">✕ PRZERWIJ</button>
+  </div>
 </header>
 
-<!-- ── MODAL: TRYB SKANOWANIA ── -->
 <div class="modal-ov" id="modalOv">
   <div class="modal">
     <h2>TRYB SKANOWANIA</h2>
     <div class="modal-opts">
       <label class="modal-opt sel" id="optInc">
         <div class="mo-radio"></div>
-        <div>
-          <div class="mo-title">Tylko nowe katalogi</div>
-          <div class="mo-desc">Skanuje wyłącznie albumy, które nie były jeszcze analizowane. Szybki tryb dla nowych zakupów.</div>
-        </div>
+        <div><div class="mo-title">Tylko nowe katalogi</div><div class="mo-desc">Skanuje wyłącznie albumy, które nie były jeszcze analizowane.</div></div>
       </label>
       <label class="modal-opt" id="optFull">
         <div class="mo-radio"></div>
-        <div>
-          <div class="mo-title">Pełny skan</div>
-          <div class="mo-desc">Przeskanuj całą bibliotekę od nowa. Zalecany po zmianie ustawień analizy.</div>
-        </div>
+        <div><div class="mo-title">Pełny skan</div><div class="mo-desc">Przeskanuj całą bibliotekę od nowa.</div></div>
       </label>
     </div>
     <div class="modal-acts">
@@ -42,22 +36,16 @@
   </div>
 </div>
 
-<!-- ── MAIN ── -->
 <main>
-
-  <!-- Pasek postępu -->
   <div class="progress-wrap" id="progressWrap">
     <div class="progress-header">
       <span class="progress-label" id="progressLabel">Skanowanie...</span>
       <span class="progress-cur"   id="progressCur"></span>
     </div>
-    <div class="progress-bar">
-      <div class="progress-fill" id="progressFill" style="width:0%"></div>
-    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
   </div>
 
-  <!-- Informacje o ostatnim skanie -->
-  <div class="scan-info" id="scanInfo">
+  <div class="scan-info">
     <div class="si">Ostatni skan: <strong id="lastScan">–</strong></div>
     <div class="si">Czas: <strong id="scanDuration">–</strong></div>
     <div class="si">Albumy: <strong id="totalAlbums">–</strong></div>
@@ -65,68 +53,39 @@
     <div class="si">Błędy: <strong id="totalErrors">–</strong> <span id="logLink"></span></div>
   </div>
 
-  <!-- Karty statystyk -->
   <div class="stats-grid" id="statsGrid"></div>
 
-  <!-- Legenda -->
   <div class="legend">
     <div class="leg-title">Legenda statusów</div>
     <div class="leg-grid">
-      <div class="leg-row">
-        <span class="badge NH  leg-s">NATIVE HIRES</span>
-        <span class="leg-desc">SR ≥ 96kHz, silna energia powyżej 22kHz, łagodny zanik spektrum</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge NHQ leg-s">NATIVE HIRES?</span>
-        <span class="leg-desc">SR ≥ 96kHz, energia powyżej 22kHz słaba – zalecana weryfikacja w Spek</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge UP  leg-s">UPSAMPLED</span>
-        <span class="leg-desc">SR ≥ 96kHz, ostry klif spektrum na 22kHz – brak oryginalnej treści hi-res</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge UPQ leg-s">UPSAMPLED?</span>
-        <span class="leg-desc">SR ≥ 96kHz, spektrum niejednoznaczne – sprawdź ręcznie w Spek</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge H4  leg-s">HI-RES 44/48</span>
-        <span class="leg-desc">24bit, SR 44.1kHz lub 48kHz – lepsza dynamika niż CD, bez rozszerzonego pasma</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge CD  leg-s">CD QUALITY</span>
-        <span class="leg-desc">16bit, SR 44.1kHz lub 48kHz – natywna jakość CD</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge MX  leg-s">MIXED</span>
-        <span class="leg-desc">Album zawiera pliki różnych kategorii – najedź myszką po szczegóły</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge ME  leg-s">* (meta)</span>
-        <span class="leg-desc">Format AAC/M4A – klasyfikacja tylko z metadanych, brak analizy spektrum</span>
-      </div>
-      <div class="leg-row">
-        <span class="badge UN  leg-s">UNKNOWN</span>
-        <span class="leg-desc">Nie udało się określić statusu – sprawdź log błędów</span>
-      </div>
+      <div class="leg-row"><span class="badge NH  ">NATIVE HIRES</span>   <span class="leg-desc">SR ≥ 96kHz, silna energia powyżej 22kHz, łagodny zanik spektrum</span></div>
+      <div class="leg-row"><span class="badge NHQ ">NATIVE HIRES?</span>  <span class="leg-desc">SR ≥ 96kHz, energia powyżej 22kHz słaba – zalecana weryfikacja w Spek</span></div>
+      <div class="leg-row"><span class="badge UP  ">UPSAMPLED</span>      <span class="leg-desc">SR ≥ 96kHz, ostry klif spektrum na 22kHz – brak oryginalnej treści hi-res</span></div>
+      <div class="leg-row"><span class="badge UPQ ">UPSAMPLED?</span>     <span class="leg-desc">SR ≥ 96kHz, spektrum niejednoznaczne – sprawdź ręcznie w Spek</span></div>
+      <div class="leg-row"><span class="badge H4  ">HI-RES 44/48</span>  <span class="leg-desc">24bit, SR 44.1kHz lub 48kHz – lepsza dynamika niż CD</span></div>
+      <div class="leg-row"><span class="badge CD  ">CD QUALITY</span>     <span class="leg-desc">16bit, SR 44.1kHz lub 48kHz – natywna jakość CD</span></div>
+      <div class="leg-row"><span class="badge MX  ">MIXED</span>          <span class="leg-desc">Album zawiera pliki różnych kategorii – najedź myszką po szczegóły</span></div>
+      <div class="leg-row"><span class="badge ME  ">* (meta)</span>       <span class="leg-desc">Format AAC/M4A – klasyfikacja tylko z metadanych</span></div>
+      <div class="leg-row"><span class="badge UN  ">UNKNOWN</span>        <span class="leg-desc">Nie udało się określić statusu – sprawdź log błędów</span></div>
+      <div class="leg-row"><span class="badge CD  ">✎</span>             <span class="leg-desc">Ikona ✎ przy statusie oznacza ręcznie ustawiony status</span></div>
     </div>
   </div>
 
-  <!-- Filtry -->
   <div class="filters">
     <input class="fi" id="fArtist" type="text" placeholder="Filtruj po wykonawcy...">
     <input class="fi" id="fAlbum"  type="text" placeholder="Filtruj po albumie...">
     <button class="btn-clear" id="btnClear">✕ Wyczyść</button>
+    <button class="btn-collapse" id="btnCollapseAll">⊟ Zwiń wszystkie</button>
+    <button class="btn-collapse" id="btnExpandAll">⊞ Rozwiń wszystkie</button>
     <span class="rc" id="rc"></span>
   </div>
 
-  <!-- Tabela wyników -->
   <div class="table-wrap" id="tableWrap">
     <div class="empty" id="emptyState">
       <div class="empty-icon">◎</div>
       <p>Brak wyników. Uruchom skan aby przeanalizować bibliotekę.</p>
     </div>
   </div>
-
 </main>
 
 <script src="/app.js"></script>
