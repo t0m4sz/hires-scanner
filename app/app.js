@@ -323,12 +323,21 @@ function setBtnIdle() {
   const b = document.getElementById('btnScan');
   b.disabled    = false;
   b.textContent = '⬡ SKANUJ PLIKI';
+  document.getElementById('btnStop').style.display = 'none';
 }
 
 function setBtnScanning() {
   const b = document.getElementById('btnScan');
   b.disabled    = true;
   b.textContent = '⟳ SKANOWANIE...';
+  document.getElementById('btnStop').style.display = 'inline-block';
+}
+
+async function stopScan() {
+  try {
+    await fetch('/api/stop', { method: 'POST' });
+    document.getElementById('btnStop').style.display = 'none';
+  } catch(e) { console.error(e); }
 }
 
 document.getElementById('btnStart').addEventListener('click', async () => {

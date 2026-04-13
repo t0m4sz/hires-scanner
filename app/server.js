@@ -122,6 +122,15 @@ function handleStatus(res) {
   });
 }
 
+function handleStop(res) {
+  if (!scanProcess || scanProcess.killed) {
+    sendJSON(res, { error: 'Brak aktywnego skanu' }, 404);
+    return;
+  }
+  scanProcess.kill('SIGTERM');
+  sendJSON(res, { status: 'stopping' });
+}
+
 // ── STATIC FILES ──────────────────────────────────────────────────────────────
 function handleStatic(req, res) {
   const filePath = path.join('/app', req.url === '/' ? 'index.html' : req.url);
@@ -153,6 +162,7 @@ http.createServer((req, res) => {
   if (url === '/api/scan'     && req.method === 'POST') return handleScan(req, res);
   if (url === '/api/log'      && req.method === 'GET')  return handleLog(res);
   if (url === '/api/status'   && req.method === 'GET')  return handleStatus(res);
+  if (url === '/api/stop'     && req.method === 'POST') return handleStop(res);
 
   handleStatic(req, res);
 }).listen(PORT, () => {

@@ -70,6 +70,21 @@ header {
 .btn-scan:hover { opacity: .85; }
 .btn-scan:disabled { opacity: .4; cursor: not-allowed; }
 
+.btn-stop {
+  background: transparent;
+  color: #e05050;
+  border: 1px solid #e05050;
+  padding: 8px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  margin-left: 10px;
+  transition: all .15s;
+}
+.btn-stop:hover { background: rgba(224,80,80,.1); }
+
 /* ── MAIN ── */
 main { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
 

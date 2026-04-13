@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# Hi-Res Scanner v3
+# Hi-Res Scanner v4
 # =============================================================================
 
 MUSIC_PATH="${MUSIC_PATH:-/music}"
@@ -17,8 +17,27 @@ FULL_SCAN=false
 [ "$1" = "--full" ] && FULL_SCAN=true
 
 SCAN_START=$(date +%s)
+INTERRUPTED=false
 
-# Logging - all to file AND docker console
+# =============================================================================
+# Graceful shutdown on SIGTERM/SIGINT
+# =============================================================================
+cleanup() {
+    INTERRUPTED=true
+    log "Skan przerwany przez uzytkownika"
+    kill $(jobs -p) 2>/dev/null
+    SCAN_END=$(date +%s)
+    D=$((SCAN_END - SCAN_START))
+    DUR=$(printf "%02d:%02d:%02d" $((D/3600)) $(((D%3600)/60)) $((D%60)))
+    echo "{\"total\":$TO_SCAN,\"done\":$DONE,\"skipped\":$SKIPPED,\"errors\":$ERRORS,\"running\":false,\"interrupted\":true,\"finished\":\"$(date -Iseconds)\"}" > "$PROGRESS_FILE"
+    log "Skan zakonczony (przerwany). Albumy: $DONE, Bledy: $ERRORS, Czas: $DUR"
+    exit 1
+}
+trap cleanup SIGTERM SIGINT
+
+# =============================================================================
+# Logging
+# =============================================================================
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
     echo "$msg" | tee -a "$LOG_FILE"
@@ -41,7 +60,9 @@ fi
 
 [ ! -f "$RESULTS_FILE" ] && echo '[]' > "$RESULTS_FILE"
 
+# =============================================================================
 # Find dirs with audio files
+# =============================================================================
 log "Szukam katalogow z plikami audio w: $MUSIC_PATH"
 
 DIRS_WITH_AUDIO=()
@@ -53,7 +74,9 @@ done < <(find "$MUSIC_PATH" -type d -print0 2>/dev/null)
 TOTAL_DIRS=${#DIRS_WITH_AUDIO[@]}
 log "Znaleziono $TOTAL_DIRS katalogow z plikami audio"
 
-# Filter - skip already scanned in incremental mode
+# =============================================================================
+# Filter already scanned (incremental mode)
+# =============================================================================
 DIRS_TO_SCAN=()
 SKIPPED=0
 
@@ -67,7 +90,6 @@ try:
 except:
     print('no')
 " 2>>"$LOG_FILE")
-
     if [ "$is_scanned" = "yes" ] && [ "$FULL_SCAN" = false ]; then
         SKIPPED=$((SKIPPED + 1))
     else
@@ -78,46 +100,42 @@ done
 TO_SCAN=${#DIRS_TO_SCAN[@]}
 log "Do skanowania: $TO_SCAN katalogow (pominieto: $SKIPPED)"
 
-echo "{\"total\":$TO_SCAN,\"done\":0,\"skipped\":$SKIPPED,\"errors\":0,\"running\":true,\"current\":\"Inicjalizacja...\",\"started\":\"$(date -Iseconds)\"}" > "$PROGRESS_FILE"
-
 DONE=0
 ERRORS=0
 TOTAL_FILES=0
 
+echo "{\"total\":$TO_SCAN,\"done\":0,\"skipped\":$SKIPPED,\"errors\":0,\"running\":true,\"current\":\"Inicjalizacja...\",\"started\":\"$(date -Iseconds)\"}" > "$PROGRESS_FILE"
+
 # =============================================================================
-# get_stream_info FILE -> sr|bits|codec  (no python3)
+# get_stream_info FILE -> sr|bits|codec
+# Single ffprobe call WITH keys (no nokey=1)
 # =============================================================================
 get_stream_info() {
     local file="$1"
-    local sr bits codec
 
-    sr=$(ffprobe -v quiet \
-        -show_entries stream=sample_rate \
-        -of default=noprint_wrappers=1:nokey=1 \
-        -select_streams a:0 "$file" 2>/dev/null | head -1 | tr -d '[:space:]')
+    local raw
+    raw=$(ffprobe -v quiet \
+        -show_entries stream=sample_rate,bits_per_raw_sample,bits_per_sample,codec_name \
+        -of default=noprint_wrappers=1 \
+        -select_streams a:0 "$file" 2>/dev/null)
 
-    bits=$(ffprobe -v quiet \
-        -show_entries stream=bits_per_raw_sample \
-        -of default=noprint_wrappers=1:nokey=1 \
-        -select_streams a:0 "$file" 2>/dev/null | head -1 | tr -d '[:space:]')
+    local sr bits_raw bits_sample codec bits
+    sr=$(echo          "$raw" | grep '^sample_rate='         | head -1 | cut -d= -f2 | tr -d '[:space:]')
+    bits_raw=$(echo    "$raw" | grep '^bits_per_raw_sample=' | head -1 | cut -d= -f2 | tr -d '[:space:]')
+    bits_sample=$(echo "$raw" | grep '^bits_per_sample='     | head -1 | cut -d= -f2 | tr -d '[:space:]')
+    codec=$(echo       "$raw" | grep '^codec_name='          | head -1 | cut -d= -f2 | tr -d '[:space:]')
 
-    if [ -z "$bits" ] || [ "$bits" = "0" ]; then
-        bits=$(ffprobe -v quiet \
-            -show_entries stream=bits_per_sample \
-            -of default=noprint_wrappers=1:nokey=1 \
-            -select_streams a:0 "$file" 2>/dev/null | head -1 | tr -d '[:space:]')
+    if [ -n "$bits_raw" ] && [ "$bits_raw" != "0" ]; then
+        bits="$bits_raw"
+    else
+        bits="$bits_sample"
     fi
-
-    codec=$(ffprobe -v quiet \
-        -show_entries stream=codec_name \
-        -of default=noprint_wrappers=1:nokey=1 \
-        -select_streams a:0 "$file" 2>/dev/null | head -1 | tr -d '[:space:]')
 
     echo "${sr:-0}|${bits:-0}|${codec:-unknown}"
 }
 
 # =============================================================================
-# get_album_tags FILE -> artist|album  (no python3)
+# get_album_tags FILE -> artist|album
 # =============================================================================
 get_album_tags() {
     local file="$1"
@@ -147,7 +165,8 @@ get_album_tags() {
 }
 
 # =============================================================================
-# analyze_spectrum FILE SR EXT -> result string
+# analyze_spectrum FILE SR EXT -> strong|weak|cliff|cliff_unclear|native|meta_only|error
+# Runs 3 sox processes in parallel, each reads file independently
 # =============================================================================
 analyze_spectrum() {
     local file="$1"
@@ -157,20 +176,25 @@ analyze_spectrum() {
     [ "$ext" = "aac" ] || [ "$ext" = "m4a" ] && echo "meta_only" && return
     [ "$sr" -lt 88200 ] 2>/dev/null && echo "native" && return
 
-    # Single decode pass - pipe raw PCM to 3 parallel stat analyses via temp files
     local tmp_below tmp_above tmp_above30
     tmp_below=$(mktemp)
     tmp_above=$(mktemp)
     tmp_above30=$(mktemp)
 
-    sox "$file" -p remix 1 2>/dev/null | tee \
-        >(sox -p -n sinc -22000 stat 2>"$tmp_below") \
-        >(sox -p -n sinc  22000 stat 2>"$tmp_above") | \
-        sox -p -n sinc 30000 stat 2>"$tmp_above30"
+    # Run 3 sox analyses in parallel (each reads file independently)
+    sox "$file" -n remix 1 sinc -22000 stat 2>"$tmp_below"  &
+    local pid_below=$!
+    sox "$file" -n remix 1 sinc  22000 stat 2>"$tmp_above"  &
+    local pid_above=$!
+    sox "$file" -n remix 1 sinc  30000 stat 2>"$tmp_above30" &
+    local pid_above30=$!
+
+    # Wait for all three to finish
+    wait $pid_below $pid_above $pid_above30
 
     local e_below e_above e_above30
-    e_below=$(awk '/RMS.*amplitude/{print $NF}' "$tmp_below")
-    e_above=$(awk '/RMS.*amplitude/{print $NF}' "$tmp_above")
+    e_below=$(awk '/RMS.*amplitude/{print $NF}'  "$tmp_below")
+    e_above=$(awk '/RMS.*amplitude/{print $NF}'  "$tmp_above")
     e_above30=$(awk '/RMS.*amplitude/{print $NF}' "$tmp_above30")
 
     rm -f "$tmp_below" "$tmp_above" "$tmp_above30"
@@ -217,7 +241,7 @@ classify_file() {
     # AAC / M4A
     if [ "$ext" = "aac" ] || [ "$ext" = "m4a" ] || [ "$codec" = "aac" ]; then
         [ "$sr" -ge 88200 ] 2>/dev/null && echo "NATIVE_HIRES_META:$sr:$bits" && return
-        [ "$bits" -gt 16 ]  2>/dev/null && echo "HIRES_44_48_META:$sr:$bits"  && return
+        [ "$bits" -gt 16  ] 2>/dev/null && echo "HIRES_44_48_META:$sr:$bits"  && return
         echo "CD_QUALITY_META:$sr:$bits"; return
     fi
 
@@ -249,12 +273,11 @@ classify_file() {
         return
     fi
 
-    # Fallback
     echo "UNKNOWN:$sr:$bits"
 }
 
 # =============================================================================
-# map_status RAWKEY -> "Human Label|Confidence"
+# map_status / map_label
 # =============================================================================
 map_status() {
     case "$1" in
@@ -308,39 +331,34 @@ for dir in "${DIRS_TO_SCAN[@]}"; do
 
     TOTAL_FILES=$((TOTAL_FILES + ${#audio_files[@]}))
 
-    # Get tags from first file
+    # Tags from first file
     first="${audio_files[0]}"
     tags=$(get_album_tags "$first")
     artist=$(echo "$tags" | cut -d'|' -f1)
     album=$(echo  "$tags" | cut -d'|' -f2)
 
-    # Detect if this is a Vol./Disc subdirectory
+    # Vol./Disc detection
     dir_base=$(basename "$dir")
     is_vol=false
     echo "$dir_base" | grep -iqE "^(vol|volume|disc|disk|cd|part)[\.\s_-]*[0-9]" && is_vol=true
 
     if [ "$is_vol" = true ]; then
-        # Parent directory contains artist and album info
         pdir=$(dirname "$dir")
-
-        # Artist fallback: grandparent dir name
         [ -z "$artist" ] && artist=$(basename "$(dirname "$pdir")")
-
-        # Album: use tag if available, else clean parent dir name
-        # Always append Vol. name in parentheses
         if [ -z "$album" ]; then
-            album=$(basename "$pdir" | sed 's/^\[[0-9]\{4\}\][[:space:]]*[-]*[[:space:]]*//')
+            palb=$(basename "$pdir" | sed 's/^\[[0-9]\{4\}\][[:space:]]*[-]*[[:space:]]*//')
+            album="${palb} (${dir_base})"
+        else
+            album="${album} (${dir_base})"
         fi
-        album="${album} (${dir_base})"
     else
-        # Normal directory
         [ -z "$artist" ] && artist=$(basename "$(dirname "$dir")")
-        [ -z "$album" ]  && album=$(echo "$dir_base" | sed 's/^\[[0-9]\{4\}\][[:space:]]*[-]*[[:space:]]*//')
+        [ -z "$album"  ] && album=$(echo "$dir_base" | sed 's/^\[[0-9]\{4\}\][[:space:]]*[-]*[[:space:]]*//')
     fi
 
-    # Windows path
+    # Windows path - single backslashes
     rel="${dir#$MUSIC_PATH}"
-    win_path="Z:\\Muzyka\\Tidal$(echo "$rel" | sed 's|/|\\\\|g')"
+    win_path="Z:\\Muzyka\\Tidal$(echo "$rel" | sed 's|/|\\|g')"
 
     # Classify each file
     declare -A status_counts
@@ -360,13 +378,12 @@ for dir in "${DIRS_TO_SCAN[@]}"; do
         fi
     done
 
-    # Determine album status
+    # Album status
     uc=${#status_counts[@]}
     album_status=""; album_confidence=""; tooltip=""
 
     if [ "$uc" -eq 0 ]; then
-        album_status="ERROR"
-        album_confidence="Blad podczas analizy"
+        album_status="ERROR"; album_confidence="Blad podczas analizy"
     elif [ "$uc" -eq 1 ]; then
         raw_key="${!status_counts[@]}"
         mapped=$(map_status "$raw_key")
@@ -392,17 +409,10 @@ cache.setdefault('scanned', {})['$dir_hash'] = '$(date -Iseconds)'
 with open('$CACHE_FILE', 'w') as f: json.dump(cache, f)
 " 2>>"$LOG_FILE"
 
-    # Save result via env vars
-    export _A="$artist"
-    export _B="$album"
-    export _P="$dir"
-    export _W="$win_path"
-    export _S="$album_status"
-    export _C="$album_confidence"
-    export _T="$tooltip"
-    export _F="${#audio_files[@]}"
-    export _D="$(date -Iseconds)"
-    export _RF="$RESULTS_FILE"
+    # Save result
+    export _A="$artist" _B="$album" _P="$dir" _W="$win_path"
+    export _S="$album_status" _C="$album_confidence" _T="$tooltip"
+    export _F="${#audio_files[@]}" _D="$(date -Iseconds)" _RF="$RESULTS_FILE"
 
     python3 << 'PYEOF' 2>>"$LOG_FILE"
 import json, os
@@ -423,24 +433,22 @@ try:
 except: results = []
 results = [r for r in results if r.get('path') != e['path']]
 results.append(e)
-with open(rf,'w') as f: json.dump(results,f,ensure_ascii=False,indent=2)
+with open(rf,'w') as f: json.dump(results, f, ensure_ascii=False, indent=2)
 PYEOF
 
     unset status_counts
     declare -A status_counts
 done
 
+# =============================================================================
 # Finalize
+# =============================================================================
 SCAN_END=$(date +%s)
 D=$((SCAN_END - SCAN_START))
 DUR=$(printf "%02d:%02d:%02d" $((D/3600)) $(((D%3600)/60)) $((D%60)))
 
-export _RF="$RESULTS_FILE"
-export _MF="$META_FILE"
-export _DONE="$DONE"
-export _ERR="$ERRORS"
-export _DUR="$DUR"
-export _FULL="$FULL_SCAN"
+export _RF="$RESULTS_FILE" _MF="$META_FILE"
+export _DONE="$DONE" _ERR="$ERRORS" _DUR="$DUR" _FULL="$FULL_SCAN"
 
 python3 << 'PYEOF' 2>>"$LOG_FILE"
 import json, os
@@ -449,8 +457,7 @@ rf = os.environ.get('_RF','/data/scan_results.json')
 mf = os.environ.get('_MF','/data/scan_meta.json')
 try:
     with open(rf) as f: results = json.load(f)
-    ta = len(results)
-    tf = sum(r.get('fileCount',0) for r in results)
+    ta = len(results); tf = sum(r.get('fileCount',0) for r in results)
 except: ta = 0; tf = 0
 meta = {
     'lastScan':     datetime.now().isoformat(),
@@ -461,9 +468,8 @@ meta = {
     'duration':     os.environ.get('_DUR','00:00:00'),
     'mode':         'full' if os.environ.get('_FULL')=='true' else 'incremental',
 }
-with open(mf,'w') as f: json.dump(meta,f)
+with open(mf,'w') as f: json.dump(meta, f)
 PYEOF
 
 echo "{\"total\":$TO_SCAN,\"done\":$DONE,\"skipped\":$SKIPPED,\"errors\":$ERRORS,\"running\":false,\"finished\":\"$(date -Iseconds)\"}" > "$PROGRESS_FILE"
-
 log "Skan zakonczony. Albumy: $DONE, Pliki: $TOTAL_FILES, Bledy: $ERRORS, Czas: $DUR"
